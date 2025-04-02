@@ -4,6 +4,8 @@ import { compare } from "bcryptjs";
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+export const runtime = 'edge';
+
 const handler = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [

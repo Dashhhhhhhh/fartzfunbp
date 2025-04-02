@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
+export const runtime = 'edge';
+export const preferredRegion = 'iad1';
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession();
