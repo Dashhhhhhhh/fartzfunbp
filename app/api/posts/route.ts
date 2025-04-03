@@ -1,6 +1,6 @@
-import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
 export const runtime = 'edge';
 export const preferredRegion = 'iad1';
@@ -20,22 +20,37 @@ export async function POST(req: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
+    // Get user id from email
+    const { data: user } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', session.user.email)
+      .single();
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const post = await prisma.post.create({
-      data: {
-        title,
-        content,
-        published: true,
-        authorId: user.id,
-      },
-    });
+    // Create post
+    const { data: post, error } = await supabase
+      .from('posts')
+      .insert([
+        {
+          title,
+          content,
+          published: true,
+          author_id: user.id
+        }
+      ])
+      .select('*, author:users(name, email)')
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Error creating post" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(post, { status: 201 });
   } catch (error) {
@@ -48,20 +63,21 @@ export async function POST(req: Request) {
 
 export async function GET() {
   try {
-    const posts = await prisma.post.findMany({
-      where: { published: true },
-      include: {
-        author: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select(`
+        *,
+        author:users(name, email)
+      `)
+      .eq('published', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Error fetching posts" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(posts);
   } catch (error) {

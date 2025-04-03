@@ -1,13 +1,9 @@
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
 import { compare } from "bcryptjs";
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-
-export const runtime = 'edge';
+import { supabase } from "@/lib/supabase";
 
 const handler = NextAuth({
-  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -20,13 +16,13 @@ const handler = NextAuth({
           throw new Error("Invalid credentials");
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email
-          }
-        });
+        const { data: user, error } = await supabase
+          .from('users')
+          .select('id, email, password, name')
+          .eq('email', credentials.email)
+          .single();
 
-        if (!user || !user?.password) {
+        if (error || !user?.password) {
           throw new Error("Invalid credentials");
         }
 
@@ -39,15 +35,28 @@ const handler = NextAuth({
           throw new Error("Invalid credentials");
         }
 
-        return user;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name
+        };
       }
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
     signIn: "/auth/signin"
+  },
+  callbacks: {
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.id = token.sub as string;
+      }
+      return session;
+    }
   }
 });
 

@@ -1,13 +1,10 @@
-import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
-
-export const runtime = 'edge';
+import { supabase } from "@/lib/supabase";
 
 export async function POST(req: Request) {
   try {
     const { name, email, password } = await req.json();
-
     if (!name || !email || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
@@ -15,9 +12,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    // Check if user exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', email)
+      .single();
 
     if (existingUser) {
       return NextResponse.json(
@@ -26,20 +26,25 @@ export async function POST(req: Request) {
       );
     }
 
-    const hashedPassword = await hash(password, 10);
+    const hashedPassword = await hash(password, 12);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-      },
-    });
+    // Create new user
+    const { data: user, error } = await supabase
+      .from('users')
+      .insert([
+        { name, email, password: hashedPassword }
+      ])
+      .select('id, name, email')
+      .single();
 
-    return NextResponse.json(
-      { message: "User created successfully" },
-      { status: 201 }
-    );
+    if (error) {
+      return NextResponse.json(
+        { error: "Error creating user" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ user });
   } catch (error) {
     return NextResponse.json(
       { error: "Error creating user" },
